@@ -84,6 +84,7 @@
   <div id="gate" class="gate">
     <p>Sign in to see your history.</p>
     <button class="signin" id="signinBtn">Sign in with Google</button>
+    <p id="authError" style="color:var(--worst,#c14f63);font-size:.82rem;margin-top:14px;display:none;"></p>
   </div>
 
   <div id="app">
@@ -121,9 +122,20 @@ let allDays = []; // [{dayNumber, date, mood, tier, journal}] chronological, cur
 let selected = new Set();   // days checked for "copy selected"
 let expanded = new Set();   // days currently showing full journal text
 
+function showAuthError(err) {
+  console.error("Auth/data error:", err);
+  const el = document.getElementById("authError");
+  el.textContent = "Something went wrong: " + (err && err.message ? err.message : String(err));
+  el.style.display = "block";
+}
+
 document.getElementById("signinBtn").onclick = () => {
-  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()).catch(showAuthError);
 };
+
+// After a redirect-based sign-in, Firebase needs this to finish resolving
+// the result on the page you land back on.
+auth.getRedirectResult().catch(showAuthError);
 
 auth.onAuthStateChanged(async (user) => {
   if (!user) {
@@ -135,13 +147,20 @@ auth.onAuthStateChanged(async (user) => {
   uid = user.uid;
   document.getElementById("gate").style.display = "none";
   document.getElementById("app").classList.add("show");
-  startDate = await ensureUserDoc(uid);
-  unsub = entriesCollection(uid).onSnapshot((snap) => {
-    entries = {};
-    snap.forEach((doc) => { entries[doc.id] = doc.data(); });
-    buildAllDays();
-    render();
-  });
+  try {
+    startDate = await ensureUserDoc(uid);
+    unsub = entriesCollection(uid).onSnapshot(
+      (snap) => {
+        entries = {};
+        snap.forEach((doc) => { entries[doc.id] = doc.data(); });
+        buildAllDays();
+        render();
+      },
+      (err) => showAuthError(err)
+    );
+  } catch (err) {
+    showAuthError(err);
+  }
 });
 
 function buildAllDays() {

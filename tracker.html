@@ -70,6 +70,7 @@
   <div id="gate" class="gate">
     <p>Sign in to start (or resume) your tracker. It's yours, synced to your account.</p>
     <button class="signin" id="signinBtn">Sign in with Google</button>
+    <p id="authError" style="color:var(--worst,#c14f63);font-size:.82rem;margin-top:14px;display:none;"></p>
   </div>
 
   <div id="app">
@@ -114,10 +115,22 @@
 <script>
 let uid = null, startDate = null, entries = {}, unsub = null;
 
+function showAuthError(err) {
+  console.error("Auth/data error:", err);
+  const el = document.getElementById("authError");
+  el.textContent = "Something went wrong: " + (err && err.message ? err.message : String(err));
+  el.style.display = "block";
+}
+
 document.getElementById("signinBtn").onclick = () => {
-  auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
+  auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()).catch(showAuthError);
 };
 document.getElementById("signoutBtn").onclick = () => auth.signOut();
+
+// After a redirect-based sign-in, Firebase needs this to finish resolving
+// the result on the page you land back on. If this rejects (or silently
+// finds no result), that's why "nothing loads" after picking your account.
+auth.getRedirectResult().catch(showAuthError);
 
 auth.onAuthStateChanged(async (user) => {
   if (!user) {
@@ -130,12 +143,19 @@ auth.onAuthStateChanged(async (user) => {
   document.getElementById("gate").style.display = "none";
   document.getElementById("app").classList.add("show");
   document.getElementById("syncedMsg").classList.add("show");
-  startDate = await ensureUserDoc(uid);
-  unsub = entriesCollection(uid).onSnapshot((snap) => {
-    entries = {};
-    snap.forEach((doc) => { entries[doc.id] = doc.data(); });
-    render();
-  });
+  try {
+    startDate = await ensureUserDoc(uid);
+    unsub = entriesCollection(uid).onSnapshot(
+      (snap) => {
+        entries = {};
+        snap.forEach((doc) => { entries[doc.id] = doc.data(); });
+        render();
+      },
+      (err) => showAuthError(err) // Firestore read/permission errors land here
+    );
+  } catch (err) {
+    showAuthError(err);
+  }
 });
 
 function saveField(dateStr, dayNumber, field, value) {

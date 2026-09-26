@@ -43,10 +43,13 @@
   .week-sub{color:var(--sub);font-size:.78rem;}
   .week-body{display:none;padding:0 14px 12px;}
   .week-body.open{display:block;}
-  .day-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:.85rem;}
+  .day-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:.85rem;cursor:pointer;}
   .day-row:first-child{border-top:none;}
   .day-row .meta{color:var(--sub);font-size:.78rem;min-width:120px;}
   .day-row .txt{flex:1;white-space:pre-wrap;}
+  .day-row .txt .full{display:none;}
+  .day-row.expanded .txt .preview{display:none;}
+  .day-row.expanded .txt .full{display:inline;}
   .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}
   input[type=checkbox]{width:16px;height:16px;accent-color:var(--normal);flex-shrink:0;margin-top:2px;}
   .empty{color:var(--sub);text-align:center;margin-top:60px;font-size:.9rem;}
@@ -72,7 +75,7 @@
   <div id="app">
     <div class="lede">
       <h2>Everything you've logged</h2>
-      <p>Pick a day, a week, a month, a range, or all of it — then copy and paste straight into a chat.</p>
+      <p>Pick a day, a week, a month, a range, or all of it — then copy and paste straight into a chat. Tap a day's text to expand it.</p>
     </div>
 
     <div class="toolbar">
@@ -102,6 +105,7 @@
 let uid = null, startDate = null, entries = {}, unsub = null;
 let allDays = []; // [{dayNumber, date, mood, tier, journal}] chronological, curDay..1
 let selected = new Set();
+let expanded = new Set(); // dayNumbers currently showing full journal text
 
 document.getElementById("signinBtn").onclick = () => {
   auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
@@ -138,6 +142,10 @@ function buildAllDays() {
 
 function moodDotColor(m) {
   return { great: "var(--great)", normal: "var(--normal)", low: "var(--low)", worst: "var(--worst)" }[m] || "#4a4a4e";
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
 function render() {
@@ -205,12 +213,26 @@ function render() {
 
       for (const d of days) {
         const row = document.createElement("div");
-        row.className = "day-row";
-        const journalPreview = d.journal ? (d.journal.length > 90 ? d.journal.slice(0,90)+"…" : d.journal) : "—";
+        row.className = "day-row" + (expanded.has(d.dayNumber) ? " expanded" : "");
+        const journalText = d.journal || "—";
+        const needsTruncation = d.journal && d.journal.length > 90;
+        const preview = d.journal ? (needsTruncation ? escapeHtml(d.journal.slice(0,90)) + "…" : escapeHtml(journalText)) : "—";
+        const full = escapeHtml(journalText);
         row.innerHTML = `
           <input type="checkbox" class="day-check" data-day="${d.dayNumber}" ${selected.has(d.dayNumber)?"checked":""}>
           <div class="meta"><span class="dot" style="background:${moodDotColor(d.mood)}"></span>Day ${d.dayNumber} — ${formatDate(d.date)}</div>
-          <div class="txt">${d.mood ? MOOD[d.mood] : "—"} · ${d.tier ? TIER[d.tier] : "—"}<br><span style="color:var(--sub)">${journalPreview}</span></div>`;
+          <div class="txt">${d.mood ? MOOD[d.mood] : "—"} · ${d.tier ? TIER[d.tier] : "—"}<br>
+            <span style="color:var(--sub)" class="preview">${preview}</span>
+            <span style="color:var(--sub)" class="full">${full}</span>
+          </div>`;
+        // Clicking the row (but not the checkbox) toggles full text.
+        row.onclick = (ev) => {
+          if (ev.target.type === "checkbox") return;
+          if (expanded.has(d.dayNumber)) expanded.delete(d.dayNumber);
+          else expanded.add(d.dayNumber);
+          row.classList.toggle("expanded");
+        };
+        row.querySelector(".day-check").onclick = (ev) => ev.stopPropagation();
         row.querySelector(".day-check").onchange = (ev) => {
           if (ev.target.checked) selected.add(d.dayNumber); else selected.delete(d.dayNumber);
           render();

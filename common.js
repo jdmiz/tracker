@@ -23,19 +23,25 @@ const TOTAL_DAYS = 180;
 const MOOD = { great: "Great", normal: "Normal", low: "Low", worst: "Worst" };
 const TIER = { full: "Full", partial: "Partial", min: "Min", failed: "Failed" };
 
+function pad(n) { return String(n).padStart(2, "0"); }
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function addDays(dateStr, n) {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
 }
 
 function dayNumberOf(dateStr, startDateStr) {
-  const a = new Date(startDateStr + "T00:00:00");
-  const b = new Date(dateStr + "T00:00:00");
+  const [ay, am, ad] = startDateStr.split("-").map(Number);
+  const [by, bm, bd] = dateStr.split("-").map(Number);
+  const a = new Date(ay, am - 1, ad);
+  const b = new Date(by, bm - 1, bd);
   return Math.round((b - a) / 86400000) + 1;
 }
 
@@ -44,8 +50,9 @@ function dateOfDayNumber(n, startDateStr) {
 }
 
 function formatDate(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function weekOf(dayNumber) { return Math.ceil(dayNumber / 7); }

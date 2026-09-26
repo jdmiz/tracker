@@ -113,7 +113,7 @@
 let uid = null, startDate = null, entries = {}, unsub = null;
 
 document.getElementById("signinBtn").onclick = () => {
-  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
 };
 document.getElementById("signoutBtn").onclick = () => auth.signOut();
 
@@ -146,9 +146,40 @@ function saveField(dateStr, dayNumber, field, value) {
     { date: dateStr, dayNumber, [field]: value }, { merge: true }
   );
 }
-const saveJournal = debounce((dateStr, dayNumber, value) => saveField(dateStr, dayNumber, "journal", value), 700);
+const saveJournal = debounce((dateStr, dayNumber, value) => {
+  saveField(dateStr, dayNumber, "journal", value);
+  pendingJournal = null;
+}, 2000);
+
+// Safety net: if the tab/app is hidden or closed before the 2s pause fires
+// (phone locked, app switched, tab closed, power cut), save immediately
+// instead of waiting, so at most a word or two is ever at risk.
+let pendingJournal = null; // {ds, n, value}
+function flushPendingJournal() {
+  if (pendingJournal) {
+    saveField(pendingJournal.ds, pendingJournal.n, "journal", pendingJournal.value);
+    pendingJournal = null;
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushPendingJournal();
+});
+window.addEventListener("pagehide", flushPendingJournal);
+window.addEventListener("beforeunload", flushPendingJournal);
 
 function render() {
+  // Remember what was focused so typing isn't interrupted by auto-save re-renders.
+  const active = document.activeElement;
+  let focusInfo = null;
+  if (active && active.tagName === "TEXTAREA" && active.closest(".day")) {
+    focusInfo = {
+      dayId: active.closest(".day").id,
+      selStart: active.selectionStart,
+      selEnd: active.selectionEnd,
+      liveValue: active.value
+    };
+  }
+
   const today = todayStr();
   const curDayNum = dayNumberOf(today, startDate);
   document.getElementById("curDay").textContent = Math.min(curDayNum, TOTAL_DAYS);
@@ -200,11 +231,24 @@ function render() {
 
     const ta = document.createElement("textarea");
     ta.placeholder = "journal — what did you actually do today? write as much or as little as you want.";
-    ta.value = e.journal || "";
-    ta.oninput = () => saveJournal(ds, n, ta.value);
+    const isBeingEdited = focusInfo && focusInfo.dayId === card.id;
+    ta.value = isBeingEdited ? focusInfo.liveValue : (e.journal || "");
+    ta.oninput = () => {
+      pendingJournal = { ds, n, value: ta.value };
+      saveJournal(ds, n, ta.value);
+    };
     card.appendChild(ta);
 
     container.appendChild(card);
+  }
+
+  if (focusInfo) {
+    const newCard = document.getElementById(focusInfo.dayId);
+    const newTa = newCard && newCard.querySelector("textarea");
+    if (newTa) {
+      newTa.focus();
+      newTa.setSelectionRange(focusInfo.selStart, focusInfo.selEnd);
+    }
   }
 
   if (!render._scrolled) {

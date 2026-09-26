@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6-Month Comeback Tracker</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --card:#131316; --line:#232327;
+    --ink:#f1f1ee; --sub:#8b8b88;
+    --great:#3fae5c; --normal:#4c86c9; --low:#c9932e; --worst:#c14f63; --failed:#8a3a4a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:0 16px 80px; line-height:1.5;}
+  .wrap{max-width:760px;margin:0 auto;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid var(--line);margin-bottom:22px;}
+  header h1{font-size:1.05rem;margin:0;}
+  nav a{color:var(--sub);text-decoration:none;font-size:.85rem;margin-left:16px;}
+  nav a.active{color:var(--ink);font-weight:600;}
+  .lede h2{font-size:1.6rem;margin:0 0 4px;}
+  .lede p{color:var(--sub);margin:0 0 14px;font-size:.92rem;}
+  .synced{color:var(--great);font-size:.85rem;margin-bottom:20px;display:none;}
+  .synced.show{display:block;}
+  .stats{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:130px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;}
+  .stat .num{font-size:1.7rem;font-weight:700;}
+  .stat .label{color:var(--sub);font-size:.82rem;margin-top:2px;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:.82rem;color:var(--sub);}
+  .legend .row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;width:100%;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  .day{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:14px;}
+  .day.today{border-color:var(--normal);}
+  .day-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-bottom:12px;}
+  .day-title{margin-right:auto;}
+  .day-title .n{font-weight:700;font-size:1.02rem;}
+  .day-title .d{color:var(--sub);font-size:.8rem;}
+  .pillrow{display:flex;gap:6px;flex-wrap:wrap;}
+  .pill{background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:7px;padding:6px 11px;font-size:.82rem;cursor:pointer;}
+  .pill:hover{border-color:#3a3a3e;}
+  .pill.on-great{background:var(--great);border-color:var(--great);color:#fff;}
+  .pill.on-normal{background:var(--normal);border-color:var(--normal);color:#fff;}
+  .pill.on-low{background:var(--low);border-color:var(--low);color:#fff;}
+  .pill.on-worst{background:var(--worst);border-color:var(--worst);color:#fff;}
+  .pill.on-full{background:var(--great);border-color:var(--great);color:#fff;}
+  .pill.on-partial{background:var(--low);border-color:var(--low);color:#fff;}
+  .pill.on-min{background:#4a4a4e;border-color:#4a4a4e;color:#fff;}
+  .pill.on-failed{background:var(--failed);border-color:var(--failed);color:#fff;}
+  textarea{width:100%;background:var(--bg);border:1px dashed var(--line);border-radius:8px;color:var(--ink);
+    padding:12px;font-family:inherit;font-size:.9rem;min-height:70px;resize:vertical;}
+  textarea::placeholder{color:var(--sub);}
+  textarea:focus{outline:none;border-color:var(--normal);}
+  .gate{max-width:360px;margin:80px auto;text-align:center;}
+  .gate p{color:var(--sub);font-size:.9rem;}
+  button.signin{background:var(--ink);color:#111;border:none;border-radius:8px;padding:11px 20px;font-size:.9rem;font-weight:600;cursor:pointer;}
+  #app{display:none;}
+  #app.show{display:block;}
+  .signout{color:var(--sub);font-size:.8rem;background:none;border:none;cursor:pointer;text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>6-Month Comeback Tracker</h1>
+    <nav><a class="active" href="tracker.html">Tracker</a><a href="history.html">History</a></nav>
+  </header>
+
+  <div id="gate" class="gate">
+    <p>Sign in to start (or resume) your tracker. It's yours, synced to your account.</p>
+    <button class="signin" id="signinBtn">Sign in with Google</button>
+  </div>
+
+  <div id="app">
+    <div class="lede">
+      <h2>Day <span id="curDay">–</span> of 180</h2>
+      <p>Tick it even at bare minimum. Consistency &gt; intensity.</p>
+    </div>
+    <div class="synced" id="syncedMsg">✓ Synced to your account — works on any device you sign into.</div>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="statTicked">0</div><div class="label">days ticked</div></div>
+      <div class="stat"><div class="num" id="statStreak">0</div><div class="label">current streak</div></div>
+      <div class="stat"><div class="num" id="statPct">0%</div><div class="label">of 180 days</div></div>
+    </div>
+
+    <div class="legend">
+      <div class="row">
+        <span><span class="dot" style="background:var(--great)"></span>Great day</span>
+        <span><span class="dot" style="background:var(--normal)"></span>Normal</span>
+        <span><span class="dot" style="background:var(--low)"></span>Low</span>
+        <span><span class="dot" style="background:var(--worst)"></span>Worst day</span>
+      </div>
+      <div class="row">
+        <span><span class="dot" style="background:var(--great)"></span>Full effort</span>
+        <span><span class="dot" style="background:var(--low)"></span>Partial / what I could</span>
+        <span><span class="dot" style="background:#4a4a4e"></span>Bare minimum</span>
+        <span><span class="dot" style="background:var(--failed)"></span>Failed</span>
+      </div>
+    </div>
+
+    <div id="days"></div>
+    <div style="text-align:center;margin-top:10px;">
+      <button class="signout" id="signoutBtn">Sign out</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="common.js"></script>
+<script>
+let uid = null, startDate = null, entries = {}, unsub = null;
+
+document.getElementById("signinBtn").onclick = () => {
+  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+};
+document.getElementById("signoutBtn").onclick = () => auth.signOut();
+
+auth.onAuthStateChanged(async (user) => {
+  if (!user) {
+    document.getElementById("gate").style.display = "block";
+    document.getElementById("app").classList.remove("show");
+    if (unsub) unsub();
+    return;
+  }
+  uid = user.uid;
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").classList.add("show");
+  document.getElementById("syncedMsg").classList.add("show");
+  startDate = await ensureUserDoc(uid);
+  unsub = entriesCollection(uid).onSnapshot((snap) => {
+    entries = {};
+    snap.forEach((doc) => { entries[doc.id] = doc.data(); });
+    render();
+  });
+});
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function saveField(dateStr, dayNumber, field, value) {
+  entriesCollection(uid).doc(dateStr).set(
+    { date: dateStr, dayNumber, [field]: value }, { merge: true }
+  );
+}
+const saveJournal = debounce((dateStr, dayNumber, value) => saveField(dateStr, dayNumber, "journal", value), 700);
+
+function render() {
+  const today = todayStr();
+  const curDayNum = dayNumberOf(today, startDate);
+  document.getElementById("curDay").textContent = Math.min(curDayNum, TOTAL_DAYS);
+
+  // stats
+  let ticked = 0, streak = 0;
+  for (let n = 1; n <= curDayNum; n++) {
+    const ds = dateOfDayNumber(n, startDate);
+    if (hasContent(entries[ds])) ticked++;
+  }
+  for (let n = curDayNum; n >= 1; n--) {
+    const ds = dateOfDayNumber(n, startDate);
+    if (hasContent(entries[ds])) streak++; else break;
+  }
+  document.getElementById("statTicked").textContent = ticked;
+  document.getElementById("statStreak").textContent = streak;
+  document.getElementById("statPct").textContent = Math.round((ticked / TOTAL_DAYS) * 100) + "%";
+
+  // day cards
+  const container = document.getElementById("days");
+  container.innerHTML = "";
+  for (let n = 1; n <= curDayNum; n++) {
+    const ds = dateOfDayNumber(n, startDate);
+    const e = entries[ds] || {};
+    const card = document.createElement("div");
+    card.className = "day" + (ds === today ? " today" : "");
+    card.id = "day-" + n;
+
+    const head = document.createElement("div");
+    head.className = "day-head";
+    head.innerHTML = `
+      <div class="day-title"><span class="n">Day ${n}</span><br><span class="d">${formatDate(ds)}</span></div>
+      <div class="pillrow" data-kind="mood">
+        ${["great","normal","low","worst"].map(m =>
+          `<button class="pill ${e.mood===m?"on-"+m:""}" data-mood="${m}">${MOOD[m]}</button>`).join("")}
+      </div>
+      <div class="pillrow" data-kind="tier">
+        ${["full","partial","min","failed"].map(t =>
+          `<button class="pill ${e.tier===t?"on-"+t:""}" data-tier="${t}">${TIER[t]}</button>`).join("")}
+      </div>`;
+    card.appendChild(head);
+
+    head.querySelectorAll("[data-mood]").forEach(btn => {
+      btn.onclick = () => saveField(ds, n, "mood", btn.dataset.mood);
+    });
+    head.querySelectorAll("[data-tier]").forEach(btn => {
+      btn.onclick = () => saveField(ds, n, "tier", btn.dataset.tier);
+    });
+
+    const ta = document.createElement("textarea");
+    ta.placeholder = "journal — what did you actually do today? write as much or as little as you want.";
+    ta.value = e.journal || "";
+    ta.oninput = () => saveJournal(ds, n, ta.value);
+    card.appendChild(ta);
+
+    container.appendChild(card);
+  }
+
+  if (!render._scrolled) {
+    render._scrolled = true;
+    setTimeout(() => {
+      const el = document.getElementById("day-" + curDayNum);
+      if (el) el.scrollIntoView({ block: "center" });
+    }, 50);
+  }
+}
+</script>
+</body>
+</html>

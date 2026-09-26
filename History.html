@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>History — 6-Month Comeback Tracker</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --card:#131316; --line:#232327;
+    --ink:#f1f1ee; --sub:#8b8b88;
+    --great:#3fae5c; --normal:#4c86c9; --low:#c9932e; --worst:#c14f63; --failed:#8a3a4a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:0 16px 100px; line-height:1.5;}
+  .wrap{max-width:760px;margin:0 auto;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid var(--line);margin-bottom:22px;}
+  header h1{font-size:1.05rem;margin:0;}
+  nav a{color:var(--sub);text-decoration:none;font-size:.85rem;margin-left:16px;}
+  nav a.active{color:var(--ink);font-weight:600;}
+  .lede h2{font-size:1.4rem;margin:0 0 4px;}
+  .lede p{color:var(--sub);margin:0 0 18px;font-size:.9rem;}
+  .toolbar{position:sticky;top:0;background:var(--bg);padding:12px 0;border-bottom:1px solid var(--line);
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;z-index:5;}
+  .toolbar button{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:7px;
+    padding:8px 13px;font-size:.82rem;cursor:pointer;}
+  .toolbar button.primary{background:var(--ink);color:#111;border-color:var(--ink);font-weight:600;}
+  .toolbar input[type=date]{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 9px;font-size:.82rem;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--great);color:#fff;
+    padding:10px 18px;border-radius:8px;font-size:.85rem;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast.show{opacity:1;}
+  .month{margin-bottom:18px;}
+  .month-head{display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 0;border-bottom:1px solid var(--line);}
+  .month-head .chev{color:var(--sub);transition:transform .15s;}
+  .month-head.open .chev{transform:rotate(90deg);}
+  .month-title{font-weight:700;flex:1;}
+  .month-sub{color:var(--sub);font-size:.8rem;}
+  .month-body{display:none;padding-top:8px;}
+  .month-body.open{display:block;}
+  .week{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+  .week-head{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;}
+  .week-title{font-weight:600;font-size:.92rem;flex:1;}
+  .week-sub{color:var(--sub);font-size:.78rem;}
+  .week-body{display:none;padding:0 14px 12px;}
+  .week-body.open{display:block;}
+  .day-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:.85rem;}
+  .day-row:first-child{border-top:none;}
+  .day-row .meta{color:var(--sub);font-size:.78rem;min-width:120px;}
+  .day-row .txt{flex:1;white-space:pre-wrap;}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--normal);flex-shrink:0;margin-top:2px;}
+  .empty{color:var(--sub);text-align:center;margin-top:60px;font-size:.9rem;}
+  .gate{max-width:360px;margin:80px auto;text-align:center;}
+  .gate p{color:var(--sub);font-size:.9rem;}
+  button.signin{background:var(--ink);color:#111;border:none;border-radius:8px;padding:11px 20px;font-size:.9rem;font-weight:600;cursor:pointer;}
+  #app{display:none;}
+  #app.show{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>6-Month Comeback Tracker</h1>
+    <nav><a href="tracker.html">Tracker</a><a class="active" href="history.html">History</a></nav>
+  </header>
+
+  <div id="gate" class="gate">
+    <p>Sign in to see your history.</p>
+    <button class="signin" id="signinBtn">Sign in with Google</button>
+  </div>
+
+  <div id="app">
+    <div class="lede">
+      <h2>Everything you've logged</h2>
+      <p>Pick a day, a week, a month, a range, or all of it — then copy and paste straight into a chat.</p>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="copySelected">Copy selected (<span id="selCount">0</span>)</button>
+      <button id="copyToday">Copy today</button>
+      <button id="copyWeek">Copy this week</button>
+      <button id="copyAll">Copy everything</button>
+    </div>
+    <div class="toolbar">
+      <span style="color:var(--sub);font-size:.82rem;">Custom range:</span>
+      <input type="date" id="rangeStart"> <span style="color:var(--sub);">to</span>
+      <input type="date" id="rangeEnd">
+      <button id="copyRange">Copy range</button>
+    </div>
+
+    <div id="months"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Copied</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="common.js"></script>
+<script>
+let uid = null, startDate = null, entries = {}, unsub = null;
+let allDays = []; // [{dayNumber, date, mood, tier, journal}] chronological, curDay..1
+let selected = new Set();
+
+document.getElementById("signinBtn").onclick = () => {
+  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+};
+
+auth.onAuthStateChanged(async (user) => {
+  if (!user) {
+    document.getElementById("gate").style.display = "block";
+    document.getElementById("app").classList.remove("show");
+    if (unsub) unsub();
+    return;
+  }
+  uid = user.uid;
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").classList.add("show");
+  startDate = await ensureUserDoc(uid);
+  unsub = entriesCollection(uid).onSnapshot((snap) => {
+    entries = {};
+    snap.forEach((doc) => { entries[doc.id] = doc.data(); });
+    buildAllDays();
+    render();
+  });
+});
+
+function buildAllDays() {
+  const curDayNum = dayNumberOf(todayStr(), startDate);
+  allDays = [];
+  for (let n = 1; n <= curDayNum; n++) {
+    const ds = dateOfDayNumber(n, startDate);
+    const e = entries[ds] || {};
+    allDays.push({ dayNumber: n, date: ds, mood: e.mood, tier: e.tier, journal: e.journal || "" });
+  }
+}
+
+function moodDotColor(m) {
+  return { great: "var(--great)", normal: "var(--normal)", low: "var(--low)", worst: "var(--worst)" }[m] || "#4a4a4e";
+}
+
+function render() {
+  const container = document.getElementById("months");
+  container.innerHTML = "";
+  if (!allDays.length) {
+    container.innerHTML = `<div class="empty">No entries yet — write your first day on the Tracker page.</div>`;
+    return;
+  }
+  // group by month -> week
+  const byMonth = {};
+  for (const d of allDays) {
+    const m = monthOf(d.dayNumber), w = weekOf(d.dayNumber);
+    byMonth[m] = byMonth[m] || {};
+    byMonth[m][w] = byMonth[m][w] || [];
+    byMonth[m][w].push(d);
+  }
+  const monthNums = Object.keys(byMonth).map(Number).sort((a,b)=>b-a); // newest month first
+
+  for (const m of monthNums) {
+    const weeks = byMonth[m];
+    const weekNums = Object.keys(weeks).map(Number).sort((a,b)=>b-a);
+    const monthDiv = document.createElement("div");
+    monthDiv.className = "month";
+    const isCurrentMonth = weekNums.some(w => weeks[w].some(d => d.date === todayStr()));
+    monthDiv.innerHTML = `
+      <div class="month-head ${isCurrentMonth ? "open" : ""}">
+        <span class="chev">▶</span>
+        <span class="month-title">Month ${m}</span>
+        <span class="month-sub">${weeks[weekNums[0]] ? "" : ""}days ${Math.min(...weekNums.flatMap(w=>weeks[w].map(d=>d.dayNumber)))}–${Math.max(...weekNums.flatMap(w=>weeks[w].map(d=>d.dayNumber)))}</span>
+      </div>
+      <div class="month-body ${isCurrentMonth ? "open" : ""}"></div>`;
+    const body = monthDiv.querySelector(".month-body");
+    const head = monthDiv.querySelector(".month-head");
+    head.onclick = () => { head.classList.toggle("open"); body.classList.toggle("open"); };
+
+    for (const w of weekNums) {
+      const days = weeks[w].slice().sort((a,b)=>b.dayNumber-a.dayNumber);
+      const isCurrentWeek = days.some(d => d.date === todayStr());
+      const weekDiv = document.createElement("div");
+      weekDiv.className = "week";
+      const dNums = days.map(d=>d.dayNumber);
+      weekDiv.innerHTML = `
+        <div class="week-head">
+          <input type="checkbox" class="week-check" data-week="${m}-${w}">
+          <span class="week-title">Week ${w}</span>
+          <span class="week-sub">days ${Math.min(...dNums)}–${Math.max(...dNums)}</span>
+        </div>
+        <div class="week-body ${isCurrentWeek ? "open" : ""}"></div>`;
+      const wbody = weekDiv.querySelector(".week-body");
+      const whead = weekDiv.querySelector(".week-head");
+      whead.onclick = (ev) => {
+        if (ev.target.type === "checkbox") return;
+        wbody.classList.toggle("open");
+      };
+      const weekCheck = weekDiv.querySelector(".week-check");
+      weekCheck.onclick = (ev) => {
+        ev.stopPropagation();
+        days.forEach(d => {
+          if (weekCheck.checked) selected.add(d.dayNumber); else selected.delete(d.dayNumber);
+        });
+        render();
+      };
+      if (days.every(d => selected.has(d.dayNumber))) weekCheck.checked = true;
+
+      for (const d of days) {
+        const row = document.createElement("div");
+        row.className = "day-row";
+        const journalPreview = d.journal ? (d.journal.length > 90 ? d.journal.slice(0,90)+"…" : d.journal) : "—";
+        row.innerHTML = `
+          <input type="checkbox" class="day-check" data-day="${d.dayNumber}" ${selected.has(d.dayNumber)?"checked":""}>
+          <div class="meta"><span class="dot" style="background:${moodDotColor(d.mood)}"></span>Day ${d.dayNumber} — ${formatDate(d.date)}</div>
+          <div class="txt">${d.mood ? MOOD[d.mood] : "—"} · ${d.tier ? TIER[d.tier] : "—"}<br><span style="color:var(--sub)">${journalPreview}</span></div>`;
+        row.querySelector(".day-check").onchange = (ev) => {
+          if (ev.target.checked) selected.add(d.dayNumber); else selected.delete(d.dayNumber);
+          render();
+        };
+        wbody.appendChild(row);
+      }
+      body.appendChild(weekDiv);
+    }
+    container.appendChild(monthDiv);
+  }
+  document.getElementById("selCount").textContent = selected.size;
+}
+
+function daysInRange(pred) {
+  return allDays.filter(pred).sort((a,b)=>a.dayNumber-b.dayNumber);
+}
+
+async function doCopy(list, label) {
+  if (!list.length) { showToast("Nothing to copy"); return; }
+  const ok = await copyText(formatSelection(list));
+  showToast(ok ? `Copied ${list.length} day${list.length>1?"s":""}${label?" — "+label:""}` : "Copy failed");
+}
+
+document.getElementById("copySelected").onclick = () => {
+  const list = daysInRange(d => selected.has(d.dayNumber));
+  doCopy(list, "selected");
+};
+document.getElementById("copyToday").onclick = () => {
+  const list = daysInRange(d => d.date === todayStr());
+  doCopy(list, "today");
+};
+document.getElementById("copyWeek").onclick = () => {
+  const curW = weekOf(dayNumberOf(todayStr(), startDate));
+  const list = daysInRange(d => weekOf(d.dayNumber) === curW);
+  doCopy(list, "this week");
+};
+document.getElementById("copyAll").onclick = () => {
+  doCopy(daysInRange(() => true), "everything");
+};
+document.getElementById("copyRange").onclick = () => {
+  const s = document.getElementById("rangeStart").value;
+  const e = document.getElementById("rangeEnd").value;
+  if (!s || !e) { showToast("Pick both dates"); return; }
+  const list = daysInRange(d => d.date >= s && d.date <= e);
+  doCopy(list, `${s} to ${e}`);
+};
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+</script>
+</body>
+</html>

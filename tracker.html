@@ -56,6 +56,8 @@
   #app{display:none;}
   #app.show{display:block;}
   .signout{color:var(--sub);font-size:.8rem;background:none;border:none;cursor:pointer;text-decoration:underline;}
+  .savepill{display:inline-block;font-size:.72rem;color:var(--sub);margin-left:8px;opacity:0;transition:opacity .3s;}
+  .savepill.show{opacity:1;}
 </style>
 </head>
 <body>
@@ -136,25 +138,23 @@ auth.onAuthStateChanged(async (user) => {
   });
 });
 
-function debounce(fn, ms) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-}
-
 function saveField(dateStr, dayNumber, field, value) {
   entriesCollection(uid).doc(dateStr).set(
     { date: dateStr, dayNumber, [field]: value }, { merge: true }
   );
 }
-const saveJournal = debounce((dateStr, dayNumber, value) => {
-  saveField(dateStr, dayNumber, "journal", value);
-  pendingJournal = null;
-}, 2000);
 
-// Safety net: if the tab/app is hidden or closed before the 2s pause fires
-// (phone locked, app switched, tab closed, power cut), save immediately
-// instead of waiting, so at most a word or two is ever at risk.
+// Journal autosave strategy:
+// - While the textarea has focus, keystrokes only update `pendingJournal` in memory.
+//   Nothing is written to Firestore, so onSnapshot never fires mid-typing, so the
+//   DOM never re-renders under the user's cursor, so focus is never lost.
+// - The moment the user leaves that box (clicks another day, taps a pill, clicks
+//   outside, tabs away) `onblur` fires and saves immediately.
+// - If they never blur — phone locked, app switched, tab/page closed, power cut —
+//   the visibilitychange/pagehide/beforeunload handlers below catch it, so at most
+//   whatever's typed since the last blur is ever at risk.
 let pendingJournal = null; // {ds, n, value}
+
 function flushPendingJournal() {
   if (pendingJournal) {
     saveField(pendingJournal.ds, pendingJournal.n, "journal", pendingJournal.value);
@@ -223,22 +223,39 @@ function render() {
     card.appendChild(head);
 
     head.querySelectorAll("[data-mood]").forEach(btn => {
-      btn.onclick = () => saveField(ds, n, "mood", btn.dataset.mood);
+      btn.onclick = () => {
+        // switching pills counts as leaving the journal box too — flush first
+        if (pendingJournal && pendingJournal.ds === ds) flushPendingJournal();
+        saveField(ds, n, "mood", btn.dataset.mood);
+      };
     });
     head.querySelectorAll("[data-tier]").forEach(btn => {
-      btn.onclick = () => saveField(ds, n, "tier", btn.dataset.tier);
+      btn.onclick = () => {
+        if (pendingJournal && pendingJournal.ds === ds) flushPendingJournal();
+        saveField(ds, n, "tier", btn.dataset.tier);
+      };
     });
 
     const ta = document.createElement("textarea");
     ta.placeholder = "journal — what did you actually do today? write as much or as little as you want.";
     const isBeingEdited = focusInfo && focusInfo.dayId === card.id;
     ta.value = isBeingEdited ? focusInfo.liveValue : (e.journal || "");
-    ta.oninput = () => {
-      pendingJournal = { ds, n, value: ta.value };
-      saveJournal(ds, n, ta.value);
-    };
-    card.appendChild(ta);
 
+    ta.oninput = () => {
+      // Track locally only. No Firestore write here — this is what keeps
+      // typing uninterrupted, since a write would trigger onSnapshot -> render().
+      pendingJournal = { ds, n, value: ta.value };
+    };
+
+    ta.onblur = () => {
+      // User clicked/tapped away from this box — save now.
+      if (pendingJournal && pendingJournal.ds === ds && pendingJournal.n === n) {
+        saveField(ds, n, "journal", ta.value);
+        pendingJournal = null;
+      }
+    };
+
+    card.appendChild(ta);
     container.appendChild(card);
   }
 

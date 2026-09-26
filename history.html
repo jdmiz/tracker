@@ -43,9 +43,9 @@
   .week-sub{color:var(--sub);font-size:.78rem;}
   .week-body{display:none;padding:0 14px 12px;}
   .week-body.open{display:block;}
-  .day-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:.85rem;cursor:pointer;}
+  .day-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:.85rem;}
   .day-row:first-child{border-top:none;}
-  .day-row .meta{color:var(--sub);font-size:.78rem;min-width:120px;}
+  .day-row .meta{color:var(--sub);font-size:.78rem;min-width:110px;padding-top:1px;}
   .day-row .txt{flex:1;white-space:pre-wrap;}
   .day-row .txt .full{display:none;}
   .day-row.expanded .txt .preview{display:none;}
@@ -58,6 +58,20 @@
   button.signin{background:var(--ink);color:#111;border:none;border-radius:8px;padding:11px 20px;font-size:.9rem;font-weight:600;cursor:pointer;}
   #app{display:none;}
   #app.show{display:block;}
+
+  /* Dedicated expand/collapse toggle — its own control, never conflated with
+     text selection or the "select this day to copy" checkbox. */
+  .expand-btn{
+    flex-shrink:0; width:26px; height:26px; border-radius:6px;
+    background:transparent; border:1px solid var(--line); color:var(--sub);
+    cursor:pointer; font-size:.78rem; line-height:1; margin-top:0;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none;
+  }
+  .expand-btn:hover{border-color:#3a3a3e; color:var(--ink);}
+  .expand-btn .arrow{transition:transform .15s;}
+  .day-row.expanded .expand-btn .arrow{transform:rotate(180deg);}
+  .day-row.expanded .expand-btn{border-color:var(--normal); color:var(--normal);}
 </style>
 </head>
 <body>
@@ -75,7 +89,7 @@
   <div id="app">
     <div class="lede">
       <h2>Everything you've logged</h2>
-      <p>Pick a day, a week, a month, a range, or all of it — then copy and paste straight into a chat. Tap a day's text to expand it.</p>
+      <p>Pick a day, a week, a month, a range, or all of it — then copy and paste straight into a chat. Use the ▾ button to show a day's full journal.</p>
     </div>
 
     <div class="toolbar">
@@ -104,8 +118,8 @@
 <script>
 let uid = null, startDate = null, entries = {}, unsub = null;
 let allDays = []; // [{dayNumber, date, mood, tier, journal}] chronological, curDay..1
-let selected = new Set();
-let expanded = new Set(); // dayNumbers currently showing full journal text
+let selected = new Set();   // days checked for "copy selected"
+let expanded = new Set();   // days currently showing full journal text
 
 document.getElementById("signinBtn").onclick = () => {
   auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
@@ -147,6 +161,19 @@ function moodDotColor(m) {
 function escapeHtml(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
+
+// Single delegated listener for the whole list, bound once (not re-created
+// every render). Only the dedicated .expand-btn toggles expand/collapse —
+// clicking the journal text itself just lets you select/copy it normally,
+// and the checkbox is only ever about "select this day to copy via toolbar".
+document.getElementById("months").addEventListener("click", (ev) => {
+  const btn = ev.target.closest(".expand-btn");
+  if (!btn) return;
+  const row = btn.closest(".day-row");
+  const dayNum = Number(row.dataset.day);
+  if (expanded.has(dayNum)) expanded.delete(dayNum); else expanded.add(dayNum);
+  row.classList.toggle("expanded");
+});
 
 function render() {
   const container = document.getElementById("months");
@@ -214,25 +241,20 @@ function render() {
       for (const d of days) {
         const row = document.createElement("div");
         row.className = "day-row" + (expanded.has(d.dayNumber) ? " expanded" : "");
+        row.dataset.day = d.dayNumber;
         const journalText = d.journal || "—";
         const needsTruncation = d.journal && d.journal.length > 90;
         const preview = d.journal ? (needsTruncation ? escapeHtml(d.journal.slice(0,90)) + "…" : escapeHtml(journalText)) : "—";
         const full = escapeHtml(journalText);
         row.innerHTML = `
-          <input type="checkbox" class="day-check" data-day="${d.dayNumber}" ${selected.has(d.dayNumber)?"checked":""}>
+          <input type="checkbox" class="day-check" data-day="${d.dayNumber}" ${selected.has(d.dayNumber)?"checked":""} title="Select for copy">
           <div class="meta"><span class="dot" style="background:${moodDotColor(d.mood)}"></span>Day ${d.dayNumber} — ${formatDate(d.date)}</div>
           <div class="txt">${d.mood ? MOOD[d.mood] : "—"} · ${d.tier ? TIER[d.tier] : "—"}<br>
             <span style="color:var(--sub)" class="preview">${preview}</span>
             <span style="color:var(--sub)" class="full">${full}</span>
-          </div>`;
-        // Clicking the row (but not the checkbox) toggles full text.
-        row.onclick = (ev) => {
-          if (ev.target.type === "checkbox") return;
-          if (expanded.has(d.dayNumber)) expanded.delete(d.dayNumber);
-          else expanded.add(d.dayNumber);
-          row.classList.toggle("expanded");
-        };
-        row.querySelector(".day-check").onclick = (ev) => ev.stopPropagation();
+          </div>
+          ${needsTruncation ? `<button class="expand-btn" title="Show full entry"><span class="arrow">▾</span></button>` : ""}
+        `;
         row.querySelector(".day-check").onchange = (ev) => {
           if (ev.target.checked) selected.add(d.dayNumber); else selected.delete(d.dayNumber);
           render();

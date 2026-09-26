@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -130,12 +130,21 @@ function showAuthError(err) {
 }
 
 document.getElementById("signinBtn").onclick = () => {
-  auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()).catch(showAuthError);
+  sessionStorage.setItem("attemptingSignIn", "1");
+  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(showAuthError);
 };
 
 // After a redirect-based sign-in, Firebase needs this to finish resolving
-// the result on the page you land back on.
-auth.getRedirectResult().catch(showAuthError);
+// the result on the page you land back on. Only flag "no user" as a
+// problem if we actually just attempted a sign-in redirect.
+auth.getRedirectResult().then((result) => {
+  console.log("getRedirectResult:", result);
+  const wasAttempting = sessionStorage.getItem("attemptingSignIn");
+  if (wasAttempting) sessionStorage.removeItem("attemptingSignIn");
+  if (wasAttempting && !result.user) {
+    showAuthError({ message: "Redirect returned no user — your browser likely blocked the sign-in storage across the redirect. Try disabling any 'block cross-site data'/'private browsing' style settings, or try a different browser." });
+  }
+}).catch(showAuthError);
 
 auth.onAuthStateChanged(async (user) => {
   if (!user) {
